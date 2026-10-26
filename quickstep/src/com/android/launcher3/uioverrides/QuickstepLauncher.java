@@ -329,7 +329,7 @@ public class QuickstepLauncher extends Launcher implements RecentsViewContainer,
 
     @Override
     protected LauncherOverlayManager getDefaultOverlay() {
-        return new OverlayCallbackImpl(this);
+        return new FeedOverlayManager(this);
     }
 
     @Override

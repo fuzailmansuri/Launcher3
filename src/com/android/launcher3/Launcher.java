@@ -154,6 +154,8 @@ import androidx.annotation.VisibleForTesting;
 import androidx.core.os.BuildCompat;
 import androidx.window.embedding.RuleController;
 
+import com.android.app.animation.Animations;
+
 import com.android.launcher3.DropTarget.DragObject;
 import com.android.launcher3.accessibility.LauncherAccessibilityDelegate;
 import com.android.launcher3.allapps.ActivityAllAppsContainerView;
@@ -595,9 +597,12 @@ public class Launcher extends StatefulActivity<LauncherState>
     public void recreateOverlay() {
         setLauncherOverlay(null);
         if (mOverlayManager != null) {
-            mOverlayManager.onActivityDestroyed();
+            mOverlayManager.onActivityDestroyed(this);
         }
         mOverlayManager = getDefaultOverlay();
+        if (getRootView().isAttachedToWindow()) {
+            mOverlayManager.onAttachedToWindow();
+        }
     }
 
     /**
@@ -935,6 +940,7 @@ public class Launcher extends StatefulActivity<LauncherState>
     @Override
     protected void onStop() {
         super.onStop();
+        mOverlayManager.onActivityStopped(this);
         hideKeyboard();
         logStopAndResume(false /* isResume */);
         mAppWidgetHolder.setActivityStarted(false);
@@ -947,6 +953,8 @@ public class Launcher extends StatefulActivity<LauncherState>
     protected void onStart() {
         TraceHelper.INSTANCE.beginSection(ON_START_EVT);
         super.onStart();
+        mOverlayManager.onActivityStarted(this);
+
         mAppWidgetHolder.setActivityStarted(true);
         TraceHelper.INSTANCE.endSection();
     }
@@ -1053,6 +1061,12 @@ public class Launcher extends StatefulActivity<LauncherState>
                         .log(getAllAppsEntryEvent().get());
             }
         }
+        if (mPrevLauncherState == NORMAL) {
+            // Cancel any ongoing animations over workspace elements and hotseat in order to
+            // not conflict with workspace scaling animation.
+            Animations.Companion.cancelOngoingAnimation(getWorkspace());
+            Animations.Companion.cancelOngoingAnimation(getHotseat());
+        }
         updateDisallowBack();
     }
 
@@ -1114,6 +1128,7 @@ public class Launcher extends StatefulActivity<LauncherState>
         TraceHelper.INSTANCE.beginSection(ON_RESUME_EVT);
         super.onResume();
         mLauncherUiState.setIsResumedActivity(true);
+        mOverlayManager.onActivityResumed(this);
         DragView.removeAllViews(this);
         TraceHelper.INSTANCE.endSection();
     }
@@ -1129,6 +1144,7 @@ public class Launcher extends StatefulActivity<LauncherState>
         mLastTouchUpTime = -1;
         mDropTargetBar.animateToVisibility(false);
 
+        mOverlayManager.onActivityPaused(this);
         mAppWidgetHolder.setActivityResumed(false);
     }
 
@@ -1401,8 +1417,21 @@ public class Launcher extends StatefulActivity<LauncherState>
     private final ScreenOnListener mScreenOnListener = this::onScreenOnChanged;
 
     @Override
+    public void dispatchDeviceProfileChanged() {
+        super.dispatchDeviceProfileChanged();
+        mOverlayManager.onDeviceProfileChanged();
+    }
+
+    @Override
+    public void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mOverlayManager.onAttachedToWindow();
+    }
+
+    @Override
     public void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        mOverlayManager.onDetachedFromWindow();
         closeContextMenu();
     }
 
@@ -1598,7 +1627,7 @@ public class Launcher extends StatefulActivity<LauncherState>
         TextKeyListener.getInstance().release();
         modelCallbacks.clearPendingBinds();
         LauncherAppState.getIDP(this).removeOnChangeListener(this);
-        mOverlayManager.onActivityDestroyed();
+        mOverlayManager.onActivityDestroyed(this);
         PillColorProvider.getInstance(mWorkspace.getContext()).unregisterObserver();
     }
 
